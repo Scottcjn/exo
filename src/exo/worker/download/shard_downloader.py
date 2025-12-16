@@ -5,7 +5,7 @@ from typing import AsyncIterator, Callable, Self
 
 import anyio
 from anyio import Path, create_task_group
-from anyio.abc import TaskGroup, CancelScope
+from anyio.abc import CancelScope, TaskGroup
 
 from exo.shared.types.memory import Memory
 from exo.shared.types.models import ModelId, ModelMetadata
@@ -13,17 +13,19 @@ from exo.shared.types.worker.shards import (
     PipelineShardMetadata,
     ShardMetadata,
 )
-from exo.utils.channels import Sender, Receiver, channel
+from exo.utils.channels import Receiver, Sender, channel
 from exo.worker.download.download_utils import RepoDownloadProgress, download_shard
 
 
 @dataclass
 class ShardDownloader2:
     progress_sender: Sender[RepoDownloadProgress]
-    max_parallel_downloads=8
+    max_parallel_downloads = 8
 
     # The last item on the shard stack is currently being downloaded
-    shard_stack: list[tuple[ShardMetadata, bool]] = field(init=False, default_factory = list)
+    shard_stack: list[tuple[ShardMetadata, bool]] = field(
+        init=False, default_factory=list
+    )
     _top_scope: CancelScope | None = field(init=False, default=None)
     _tg: TaskGroup = field(init=False, default_factory=create_task_group)
 
@@ -35,12 +37,9 @@ class ShardDownloader2:
         # Create a new scope
         self._top_scope = CancelScope()
 
-
-
     async def run(self):
-        async with self._tg as tg:
+        async with self._tg:
             await anyio.sleep_forever()
-
 
     def shutdown(self):
         self.progress_sender.close()
@@ -57,9 +56,6 @@ class ShardDownloader2:
                 allow_patterns=allow_patterns,
             )
             return target_dir
-
-
-
 
     @classmethod
     def default(cls) -> tuple[Self, Receiver[RepoDownloadProgress]]:

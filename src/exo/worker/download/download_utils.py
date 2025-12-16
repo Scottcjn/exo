@@ -20,11 +20,11 @@ from pydantic import (
     TypeAdapter,
 )
 
-from exo.utils.channels import Sender, Receiver, channel
 from exo.shared.constants import EXO_HOME, EXO_MODELS_DIR
 from exo.shared.types.memory import Memory
 from exo.shared.types.worker.downloads import DownloadProgressData
 from exo.shared.types.worker.shards import ShardMetadata
+from exo.utils.channels import Receiver, Sender, channel
 from exo.worker.download.huggingface_utils import (
     filter_repo_objects,
     get_allow_patterns,
@@ -321,7 +321,7 @@ async def download_file_with_retry(
     revision: str,
     path: str,
     target_dir: Path,
-    progress_sender: Sender[tuple[int, int, bool]] | None
+    progress_sender: Sender[tuple[int, int, bool]] | None,
 ) -> Path:
     n_attempts = 30
     for attempt in range(n_attempts):
@@ -568,9 +568,7 @@ async def download_shard(
     )
     file_progress: dict[str, RepoFileDownloadProgress] = {}
 
-    async def huh(
-        file: FileListEntry, recv: Receiver[tuple[int, int, bool]]
-    ):
+    async def huh(file: FileListEntry, recv: Receiver[tuple[int, int, bool]]):
         async with recv:
             async for curr, total, done in recv:
                 await progress_sender.send(on_progress_wrapper(file, curr, total, done))
@@ -613,14 +611,12 @@ async def download_shard(
             else "in_progress",
             start_time=start_time,
         )
-        return (
-            calculate_repo_progress(
-                shard,
-                str(shard.model_meta.model_id),
-                revision,
-                file_progress,
-                all_start_time,
-            )
+        return calculate_repo_progress(
+            shard,
+            str(shard.model_meta.model_id),
+            revision,
+            file_progress,
+            all_start_time,
         )
 
     for file in filtered_file_list:
@@ -640,7 +636,9 @@ async def download_shard(
 
     semaphore = anyio.Semaphore(max_parallel_downloads)
 
-    async def download_with_semaphore(file: FileListEntry, sender: Sender[tuple[int, int, bool]]):
+    async def download_with_semaphore(
+        file: FileListEntry, sender: Sender[tuple[int, int, bool]]
+    ):
         async with semaphore:
             await download_file_with_retry(
                 str(shard.model_meta.model_id),
@@ -653,7 +651,7 @@ async def download_shard(
     if not skip_download:
         async with anyio.create_task_group() as tg:
             for file in filtered_file_list:
-                send, recv = channel[tuple[int,int,bool]](1)
+                send, recv = channel[tuple[int, int, bool]](1)
                 tg.start_soon(download_with_semaphore, file, send)
                 tg.start_soon(huh, file, recv)
 
