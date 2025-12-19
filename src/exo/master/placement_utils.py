@@ -1,5 +1,4 @@
-from collections.abc import Generator
-from typing import TypeGuard, cast
+from collections.abc import Generator, Mapping
 
 from loguru import logger
 from pydantic import BaseModel
@@ -9,7 +8,6 @@ from exo.shared.types.common import Host, NodeId
 from exo.shared.types.memory import Memory
 from exo.shared.types.models import ModelMetadata
 from exo.shared.types.profiling import NodePerformanceProfile
-from exo.shared.types.topology import NodeInfo
 from exo.shared.types.worker.runners import RunnerId, ShardAssignments
 from exo.shared.types.worker.shards import (
     PipelineShardMetadata,
@@ -23,28 +21,24 @@ class NodeWithProfile(BaseModel):
     node_id: NodeId
     node_profile: NodePerformanceProfile
 
-
-def narrow_all_nodes(nodes: list[NodeInfo]) -> TypeGuard[list[NodeWithProfile]]:
-    return all(node.node_profile is not None for node in nodes)
-
-
 def filter_cycles_by_memory(
-    cycles: list[list[NodeInfo]], required_memory: Memory
-) -> list[list[NodeInfo]]:
-    filtered_cycles: list[list[NodeInfo]] = []
+    cycles: list[list[NodeId]], node_profiles: Mapping[NodeId, NodePerformanceProfile], required_memory: Memory
+) -> list[list[NodeWithProfile]]:
+    filtered_cycles: list[list[NodeWithProfile]] = []
     for cycle in cycles:
-        if not narrow_all_nodes(cycle):
+        if not all(id in node_profiles for id in cycle):
             continue
 
+
         total_mem = sum(
-            (node.node_profile.memory.ram_available for node in cycle), start=Memory()
+            (node_profiles[node].memory.ram_available for node in cycle), start=Memory()
         )
         if total_mem >= required_memory:
-            filtered_cycles.append(cast(list[NodeInfo], cycle))
+            filtered_cycles.append([NodeWithProfile(node_id = node, node_profile=node_profiles[node]) for node in cycle])
     return filtered_cycles
 
 
-def get_smallest_cycles(cycles: list[list[NodeInfo]]) -> list[list[NodeInfo]]:
+def get_smallest_cycles(cycles: list[list[NodeWithProfile]]) -> list[list[NodeWithProfile]]:
     min_nodes = min(len(cycle) for cycle in cycles)
     return [cycle for cycle in cycles if len(cycle) == min_nodes]
 
@@ -135,11 +129,9 @@ def get_shard_assignments_for_tensor_parallel(
 
 def get_shard_assignments(
     model_meta: ModelMetadata,
-    selected_cycle: list[NodeInfo],
+    selected_cycle: list[NodeWithProfile],
     sharding: Sharding,
 ) -> ShardAssignments:
-    if not narrow_all_nodes(selected_cycle):
-        raise ValueError("All nodes must have profiles to create shard assignments")
     match sharding:
         case Sharding.Pipeline:
             return get_shard_assignments_for_pipeline_parallel(
@@ -178,8 +170,8 @@ def get_hosts_from_subgraph(cycle_digraph: Topology) -> list[Host]:
 
         for connection in cycle_digraph.list_connections():
             if (
-                connection.local_node_id == current_node.node_id
-                and connection.send_back_node_id == next_node.node_id
+                connection.local_node_id == current_node
+                and connection.send_back_node_id == next_node
             ):
                 if get_thunderbolt and not connection.is_thunderbolt():
                     continue
@@ -195,7 +187,7 @@ def get_hosts_from_subgraph(cycle_digraph: Topology) -> list[Host]:
 
 
 def get_mlx_ibv_devices_matrix(
-    selected_cycle: list[NodeInfo],
+    selected_cycle: list[NodeWithProfile],
     cycle_digraph: Topology,
 ) -> list[list[str | None]]:
     """Build connectivity matrix mapping device i to device j via RDMA interface names.
@@ -215,7 +207,7 @@ def get_mlx_ibv_devices_matrix(
                 continue
 
             # Find the IP J uses to talk to I
-            for connection_ip in _find_connection_ip(node_j, node_i, cycle_digraph):
+            for connection_ip in _find_connection_ip(node_j.node_id, node_i.node_id, cycle_digraph):
                 # This is a local IP on I, which is attached to an interface: find that interface
                 if interface_name := _find_interface_name_for_ip(connection_ip, node_i):
                     matrix[i][j] = interface_name
@@ -235,26 +227,23 @@ def get_mlx_ibv_devices_matrix(
 
 
 def _find_connection_ip(
-    node_i: NodeInfo,
-    node_j: NodeInfo,
+    node_i: NodeId,
+    node_j: NodeId,
     cycle_digraph: Topology,
 ) -> Generator[str]:
     """Find all IP addresses that connect node i to node j."""
     for connection in cycle_digraph.list_connections():
         if (
-            connection.local_node_id == node_i.node_id
-            and connection.send_back_node_id == node_j.node_id
+            connection.local_node_id == node_i
+            and connection.send_back_node_id == node_j
         ):
             yield connection.send_back_multiaddr.ip_address
 
 
 def _find_interface_name_for_ip(
     ip_address: str,
-    node_info: NodeInfo,
+    node_info: NodeWithProfile,
 ) -> str | None:
-    if node_info.node_profile is None:
-        return None
-
     logger.info(f"Searching {node_info.node_id} for ip {ip_address}:")
     for interface in node_info.node_profile.network_interfaces:
         if interface.name not in ["en2", "en3", "en4", "en5", "en6", "en7"]:
@@ -270,7 +259,7 @@ def _find_interface_name_for_ip(
 
 
 def get_mlx_ibv_coordinators(
-    selected_cycle: list[NodeInfo],
+    selected_cycle: list[NodeId],
     coordinator_port: int,
     cycle_digraph: Topology,
 ) -> dict[NodeId, str]:
@@ -280,20 +269,20 @@ def get_mlx_ibv_coordinators(
     address in format "X.X.X.X:PORT" per node.
     """
     rank_0_node = selected_cycle[0]
-    logger.info(f"Selecting coordinator from rank 0 node: {rank_0_node.node_id}")
+    logger.info(f"Selecting coordinator from rank 0 node: {rank_0_node}")
 
-    def get_ip_for_node(n: NodeInfo) -> str:
-        if n.node_id == rank_0_node.node_id:
+    def get_ip_for_node(n: NodeId) -> str:
+        if n == rank_0_node:
             return "0.0.0.0"
 
         for ip in _find_connection_ip(n, rank_0_node, cycle_digraph):
             return ip
 
         logger.warning(
-            f"Failed to find directly connected ip between {n.node_id} and {rank_0_node.node_id}"
+            f"Failed to find directly connected ip between {n} and {rank_0_node}"
         )
         raise ValueError("Current ibv backend requires all-to-all rdma connections")
 
     return {
-        n.node_id: f"{get_ip_for_node(n)}:{coordinator_port}" for n in selected_cycle
+        n: f"{get_ip_for_node(n)}:{coordinator_port}" for n in selected_cycle
     }
