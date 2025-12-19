@@ -1,5 +1,5 @@
-from collections.abc import Mapping
 import socket
+from collections.abc import Mapping
 
 from anyio import create_task_group, to_thread
 
@@ -29,15 +29,15 @@ async def check_reachability(
         out[target_node_id].add(target_ip)
 
 
-async def check_reachable(topology: Topology, profiles: Mapping[NodeId, NodePerformanceProfile]) -> dict[NodeId, set[str]]:
+async def check_reachable(
+    topology: Topology, profiles: Mapping[NodeId, NodePerformanceProfile]
+) -> dict[NodeId, set[str]]:
     reachable: dict[NodeId, set[str]] = {}
     async with create_task_group() as tg:
         for node in topology.list_nodes():
             if not node not in profiles:
                 continue
             for iface in profiles[node].network_interfaces:
-                tg.start_soon(
-                    check_reachability, iface.ip_address, node, reachable
-                )
+                tg.start_soon(check_reachability, iface.ip_address, node, reachable)
 
     return reachable
