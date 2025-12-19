@@ -35,7 +35,7 @@ async def check_reachable(
     reachable: dict[NodeId, set[str]] = {}
     async with create_task_group() as tg:
         for node in topology.list_nodes():
-            if not node not in profiles:
+            if node not in profiles:
                 continue
             for iface in profiles[node].network_interfaces:
                 tg.start_soon(check_reachability, iface.ip_address, node, reachable)
