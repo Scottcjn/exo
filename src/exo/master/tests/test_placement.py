@@ -244,7 +244,6 @@ def test_placement_prioritizes_leaf_cycle_with_less_memory(
     node_id_c = NodeId()
     node_id_d = NodeId()
 
-
     profiles = {
         node_id_a: create_node_profile(500),
         node_id_b: create_node_profile(600),
@@ -267,7 +266,6 @@ def test_placement_prioritizes_leaf_cycle_with_less_memory(
 
     logger.info(list(topology.list_connections()))
 
-
     cic = place_instance_command(
         model_meta=model_meta,
     )
@@ -280,7 +278,9 @@ def test_placement_prioritizes_leaf_cycle_with_less_memory(
     instance = list(placements.values())[0]
 
     assigned_nodes = set(instance.shard_assignments.node_to_runner.keys())
-    assert assigned_nodes == set((node_id_a, node_id_b)) or assigned_nodes == set((node_id_c, node_id_d))
+    assert assigned_nodes == set((node_id_a, node_id_b)) or assigned_nodes == set(
+        (node_id_c, node_id_d)
+    )
 
 
 def test_tensor_rdma_backend_connectivity_matrix(
@@ -335,10 +335,10 @@ def test_tensor_rdma_backend_connectivity_matrix(
 
     assert isinstance(instance, MlxJacclInstance)
 
-    assert instance.ibv_devices is not None
-    assert instance.ibv_coordinators is not None
+    assert instance.jaccl_devices is not None
+    assert instance.jaccl_coordinators is not None
 
-    matrix = instance.ibv_devices
+    matrix = instance.jaccl_devices
     assert len(matrix) == 3
 
     for i in range(3):
@@ -358,10 +358,10 @@ def test_tensor_rdma_backend_connectivity_matrix(
     assert matrix[idx_c][idx_a] == "rdma_en5"
 
     # Verify coordinators are set for all nodes
-    assert len(instance.ibv_coordinators) == 3
+    assert len(instance.jaccl_coordinators) == 3
     for node_id in assigned_nodes:
-        assert node_id in instance.ibv_coordinators
-        coordinator = instance.ibv_coordinators[node_id]
+        assert node_id in instance.jaccl_coordinators
+        coordinator = instance.jaccl_coordinators[node_id]
         assert ":" in coordinator
         # Rank 0 node should use 0.0.0.0, others should use connection-specific IPs
         if node_id == assigned_nodes[0]:

@@ -4,7 +4,7 @@ from exo.master.placement_utils import (
     NodeWithProfile,
     filter_cycles_by_memory,
     get_hosts_from_subgraph,
-    get_mlx_ibv_coordinators,
+    get_mlx_jaccl_coordinators,
     get_shard_assignments,
     get_smallest_cycles,
 )
@@ -265,7 +265,7 @@ def test_get_hosts_from_subgraph():
         assert expected_host in hosts
 
 
-def test_get_mlx_ibv_coordinators():
+def test_get_mlx_jaccl_coordinators():
     # arrange
     node_a_id = NodeId()
     node_b_id = NodeId()
@@ -295,11 +295,9 @@ def test_get_mlx_ibv_coordinators():
     topology.add_connection(node_c_id, node_a_id, conn_c_a)
     topology.add_connection(node_a_id, node_c_id, conn_a_c)
 
-    cycle = [node_a_id, node_b_id, node_c_id]
-
     # act
-    coordinators = get_mlx_ibv_coordinators(
-        cycle, coordinator_port=5000, cycle_digraph=topology
+    coordinators = get_mlx_jaccl_coordinators(
+        node_a_id, coordinator_port=5000, cycle_digraph=topology
     )
 
     # assert
