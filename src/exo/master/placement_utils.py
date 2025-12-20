@@ -218,6 +218,9 @@ def get_mlx_jaccl_devices_matrix(
             for conn in cycle_digraph.get_all_connections_between(node_i, node_j):
                 if isinstance(conn, RDMAConnection):
                     matrix[i][j] = conn.source_rdma_iface
+                    break
+            else:
+                raise ValueError("Current jaccl backend requires all-to-all RDMA connections")
 
     return matrix
 
@@ -257,6 +260,6 @@ def get_mlx_jaccl_coordinators(
         logger.warning(
             f"Failed to find directly connected ip between {n} and {coordinator}"
         )
-        raise ValueError("Current jaccl backend requires all-to-all rdma connections")
+        raise ValueError("Current jaccl backend requires all participating devices to be able to communicate")
 
     return {n: f"{get_ip_for_node(n)}:{coordinator_port}" for n in selected_cycle}
