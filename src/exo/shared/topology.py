@@ -33,21 +33,21 @@ class Topology:
     def from_snapshot(cls, snapshot: TopologySnapshot) -> "Topology":
         topology = cls()
 
-        for node in snapshot.nodes:
+        for node_id in snapshot.nodes:
             with contextlib.suppress(ValueError):
-                topology.add_node(node)
+                topology.add_node(node_id)
 
         for source, sink, connection in snapshot.connections:
             topology.add_connection(source, sink, connection)
 
         return topology
 
-    def add_node(self, node: NodeId) -> None:
-        if node in self._vertex_indices:
+    def add_node(self, node_id: NodeId) -> None:
+        if node_id in self._vertex_indices:
             return
-        rx_id = self._graph.add_node(node)
-        self._vertex_indices[node] = rx_id
-        self._graph[rx_id] = node
+        rx_id = self._graph.add_node(node_id)
+        self._vertex_indices[node_id] = rx_id
+        self._graph[rx_id] = node_id
 
     def node_is_leaf(self, node_id: NodeId) -> bool:
         return (
@@ -109,7 +109,7 @@ class Topology:
             return []
 
     def list_nodes(self) -> Iterable[NodeId]:
-        return (self._graph[i] for i in self._graph.node_indices())
+        return self._graph.nodes()
 
     def list_connections(
         self,
@@ -183,14 +183,13 @@ class Topology:
 
         return cycles
 
-    def get_subgraph_from_nodes(self, nodes: list[NodeId]) -> "Topology":
-        node_idxs = [node for node in nodes]
-        rx_idxs = [self._vertex_indices[idx] for idx in node_idxs]
+    def get_subgraph_from_nodes(self, node_ids: list[NodeId]) -> "Topology":
+        rx_idxs = [self._vertex_indices[idx] for idx in node_ids]
         topology = Topology()
         for rx_idx in rx_idxs:
             topology.add_node(self._graph[rx_idx])
         for source, sink, connection in self.list_connections():
-            if source in node_idxs and sink in node_idxs:
+            if source in node_ids and sink in node_ids:
                 topology.add_connection(source, sink, connection)
         return topology
 
