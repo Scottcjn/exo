@@ -22,6 +22,7 @@ from mlx_lm.models.qwen3_moe import Qwen3MoeSparseMoeBlock
 from exo.shared.types.worker.shards import (
     PipelineShardMetadata,
 )
+from exo.worker.runner.bootstrap import logger
 
 
 class _LayerCallable(Protocol):
@@ -170,6 +171,8 @@ def pipeline_auto_parallel(
 
     start_layer, end_layer = model_shard_meta.start_layer, model_shard_meta.end_layer
     device_rank, world_size = model_shard_meta.device_rank, model_shard_meta.world_size
+    logger.info(f"[RING3DBG] pipeline_auto_parallel: device_rank={device_rank} world_size={world_size}")
+    logger.info(f"[RING3DBG] layers: start={start_layer} end={end_layer} count={len(layers)}")
 
     layers = layers[start_layer:end_layer]
     layers[0] = PipelineFirstLayer(layers[0], device_rank, group=group)

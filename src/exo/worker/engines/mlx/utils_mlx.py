@@ -111,12 +111,16 @@ def mlx_distributed_init(
     """
     rank = bound_instance.bound_shard.device_rank
     logger.info(f"Starting initialization for rank {rank}")
+    logger.info(f"[RING3DBG] mlx_distributed_init: bound_node_id={bound_instance.bound_node_id}")
+    logger.info(f"[RING3DBG] device_rank={rank}, world_size={bound_instance.bound_shard.world_size}")
 
     # TODO: singleton instances
     match bound_instance.instance:
         case MlxRingInstance(hosts_by_node=hosts_by_node, ephemeral_port=_):
             hostfile = f"./hosts_{rank}.json"
             hosts_for_node = hosts_by_node[bound_instance.bound_node_id]
+            logger.info(f"[RING3DBG] hosts_by_node keys: {list(hosts_by_node.keys())}")
+            logger.info(f"[RING3DBG] hosts_for_node (len={len(hosts_for_node)}): {hosts_for_node}")
             hosts_json = HostList.from_hosts(hosts_for_node).model_dump_json()
 
             with open(hostfile, "w") as f:
@@ -149,6 +153,7 @@ def mlx_distributed_init(
             group = mx.distributed.init(backend="jaccl", strict=True)
 
     logger.info(f"Rank {rank} mlx distributed initialization complete")
+    logger.info(f"[RING3DBG] ring init complete: group.rank()={group.rank()} group.size()={group.size()}")
 
     return group
 
@@ -229,6 +234,8 @@ def shard_and_load(
     tokenizer = get_tokenizer(model_path, shard_metadata)
 
     logger.info(f"Group size: {group.size()}, group rank: {group.rank()}")
+    logger.info(f"[RING3DBG] shard_and_load: expected device_rank={shard_metadata.device_rank} world_size={shard_metadata.world_size}")
+    logger.info(f"[RING3DBG] actual group.rank()={group.rank()} group.size()={group.size()}")
 
     match shard_metadata:
         case TensorShardMetadata():

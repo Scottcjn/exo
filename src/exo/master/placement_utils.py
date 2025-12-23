@@ -350,12 +350,16 @@ def get_mlx_ring_hosts_by_node(
     if world_size == 0:
         return {}
 
+    logger.info(f"[RING3DBG] get_mlx_ring_hosts_by_node: world_size={world_size}, ephemeral_port={ephemeral_port}")
+    logger.info(f"[RING3DBG] cycle node_ids: {[n.node_id for n in selected_cycle]}")
+
     hosts_by_node: dict[NodeId, list[Host]] = {}
 
     for rank, node in enumerate(selected_cycle):
         node_id = node.node_id
         left_rank = (rank - 1) % world_size
         right_rank = (rank + 1) % world_size
+        logger.info(f"[RING3DBG] rank={rank} node_id={node_id} left_rank={left_rank} right_rank={right_rank}")
 
         hosts_for_node: list[Host] = []
 
@@ -370,6 +374,7 @@ def get_mlx_ring_hosts_by_node(
                 continue
 
             connection_ip = _find_ip_prioritised(node, other_node, cycle_digraph)
+            logger.info(f"[RING3DBG] rank={rank} idx={idx} connection_ip={connection_ip}")
             if connection_ip is None:
                 logger.warning(
                     f"Failed to find prioritised connection IP between {node_id} and {other_node.node_id}"
@@ -380,6 +385,7 @@ def get_mlx_ring_hosts_by_node(
 
             hosts_for_node.append(Host(ip=connection_ip, port=ephemeral_port))
 
+        logger.info(f"[RING3DBG] rank={rank} final hosts_for_node={hosts_for_node}")
         hosts_by_node[node_id] = hosts_for_node
 
     return hosts_by_node
