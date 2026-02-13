@@ -254,3 +254,10 @@ Check the `linux-success-sophia-elya` branch for platform-specific changes.
 
 <!-- Analytics -->
 ![](http://50.28.86.131:9090/pixel/exo.gif)
+
+
+## 中文简介
+
+Elyan Labs AI项目 - 为中文用户提供文档支持。
+
+Contributed by eelaine-wzw
